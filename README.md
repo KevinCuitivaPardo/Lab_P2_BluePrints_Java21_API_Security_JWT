@@ -61,22 +61,44 @@ Respuesta:
 }
 ```
 
-### 2. Consultar blueprints (requiere scope `blueprints.read`)
+Usuarios disponibles (`InMemoryUserService`) — con **scopes distintos** para poder probar el control de acceso:
+
+| Usuario     | Password        | Scopes emitidos                     |
+|-------------|------------------|--------------------------------------|
+| `student`   | `student123`     | `blueprints.read`                    |
+| `assistant` | `assistant123`   | `blueprints.read blueprints.write`   |
+
+### 2. Endpoints de negocio (heredados y asegurados del Lab P1)
+Todos viven bajo `/api/blueprints` y están protegidos por JWT + scopes:
+
+| Método | Endpoint                                   | Scope requerido      | Descripción                              |
+|--------|---------------------------------------------|-----------------------|-------------------------------------------|
+| GET    | `/api/blueprints`                            | `blueprints.read`     | Lista todos los blueprints                |
+| GET    | `/api/blueprints/{author}`                   | `blueprints.read`     | Lista los blueprints de un autor          |
+| GET    | `/api/blueprints/{author}/{bpname}`          | `blueprints.read`     | Consulta un blueprint puntual             |
+| POST   | `/api/blueprints`                            | `blueprints.write`    | Crea un nuevo blueprint                   |
+| PUT    | `/api/blueprints/{author}/{bpname}/points`   | `blueprints.write`    | Agrega un punto a un blueprint existente  |
+
+Ejemplo — consultar blueprints (requiere scope `blueprints.read`):
 ```
 GET http://localhost:8080/api/blueprints
 Authorization: Bearer <ACCESS_TOKEN>
 ```
 
-### 3. Crear blueprint (requiere scope `blueprints.write`)
+Ejemplo — crear blueprint (requiere scope `blueprints.write`; con un token de `student` responde `403 Forbidden`):
 ```
 POST http://localhost:8080/api/blueprints
 Authorization: Bearer <ACCESS_TOKEN>
 Content-Type: application/json
 
 {
-  "name": "Nuevo Plano"
+  "author": "student",
+  "name": "Nuevo Plano",
+  "points": [ { "x": 0, "y": 0 }, { "x": 5, "y": 5 } ]
 }
 ```
+
+Más ejemplos listos para ejecutar en [api.http](api.http).
 
 ---
 
@@ -92,15 +114,21 @@ Content-Type: application/json
 ## Estructura del proyecto
 ```
 src/main/java/co/edu/eci/blueprints/
-  ├── api/BlueprintController.java       # Endpoints protegidos
+  ├── api/BlueprintController.java       # Endpoints de negocio (CRUD de blueprints), protegidos por scope
   ├── auth/AuthController.java           # Login didáctico para emitir tokens
   ├── config/OpenApiConfig.java          # Configuración Swagger + JWT
+  ├── model/                             # Blueprint, Point (del Lab P1)
+  ├── persistence/                       # BlueprintPersistence + implementación en memoria y excepciones
+  ├── filters/                           # BlueprintsFilter e implementaciones (identity/redundancy/undersampling)
+  ├── services/BlueprintsServices.java   # Lógica de negocio (del Lab P1)
   └── security/
        ├── SecurityConfig.java
        ├── MethodSecurityConfig.java
        ├── JwtKeyProvider.java
        ├── InMemoryUserService.java
        └── RsaKeyProperties.java
+src/test/java/co/edu/eci/blueprints/
+  └── BlueprintsApiSecurityTest.java     # Pruebas de seguridad (401/403/200/201) con MockMvc
 src/main/resources/
   └── application.yml
 ```
@@ -108,11 +136,11 @@ src/main/resources/
 ---
 
 ## Actividades propuestas
-1. Revisar el código de configuración de seguridad (`SecurityConfig`) e identificar cómo se definen los endpoints públicos y protegidos.
-2. Explorar el flujo de login y analizar las claims del JWT emitido.
-3. Extender los scopes (`blueprints.read`, `blueprints.write`) para controlar otros endpoints de la API, del laboratorio P1 trabajado.
-4. Modificar el tiempo de expiración del token y observar el efecto.
-5. Documentar en Swagger los endpoints de autenticación y de negocio.
+1. **Revisar `SecurityConfig`**: los endpoints públicos (`/auth/login`, `/swagger-ui/**`, `/v3/api-docs/**`) se declaran con `permitAll()`; el resto de `/api/**` exige estar autenticado y tener al menos uno de los scopes `blueprints.read`/`blueprints.write` a nivel de filtro (`hasAnyAuthority`), y cada método del controlador refina el scope exacto requerido con `@PreAuthorize`.
+2. **Explorar el flujo de login**: `POST /auth/login` valida credenciales contra `InMemoryUserService` (passwords con BCrypt) y emite un JWT firmado RS256 con claims `iss`, `sub`, `iat`, `exp` y `scope`. La llave RSA se genera en memoria al arrancar (`JwtKeyProvider`) — por eso no se usa un `jwk-set-uri` externo, sino los beans `JwtEncoder`/`JwtDecoder` definidos en `SecurityConfig`.
+3. **Scopes controlando el API del Lab P1**: se integraron los endpoints originales de blueprints (`model`, `persistence`, `services` y `filters` del Lab P1) bajo `/api/blueprints`, cada uno protegido con `@PreAuthorize` según si es operación de lectura (`SCOPE_blueprints.read`) o escritura (`SCOPE_blueprints.write`). Para poder observar la diferencia, el usuario `student` solo recibe el scope de lectura y `assistant` recibe lectura+escritura (ver [InMemoryUserService.java](src/main/java/co/edu/eci/blueprints/security/InMemoryUserService.java)).
+4. **Modificar el tiempo de expiración**: cambia `blueprints.security.token-ttl-seconds` en [application.yml](src/main/resources/application.yml), reinicia la app, y observa cómo el `exp` del JWT (decódalo en [jwt.io](https://jwt.io)) y el campo `expires_in` de la respuesta cambian. Con un valor bajo (p. ej. `8`) puedes ver el token expirar y las siguientes peticiones responder `401`; **ten en cuenta que Spring Security aplica por defecto una tolerancia de reloj (`clock skew`) de 60 segundos al validar el claim `exp`**, así que con TTL=8s hay que esperar más de ~68s tras emitir el token para que la petición sea rechazada.
+5. **Swagger**: [OpenApiConfig.java](src/main/java/co/edu/eci/blueprints/config/OpenApiConfig.java) define el esquema `bearer-jwt`, y cada endpoint tiene anotaciones `@Tag`/`@Operation` (`/auth/login` está además marcado con `@SecurityRequirements` vacío para no mostrar el candado, ya que no requiere token).
 
 ---
 

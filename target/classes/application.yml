@@ -2,14 +2,15 @@ server:
   port: 8080
 
 spring:
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: https://auth.example.com/.well-known/jwks.json
+  application:
+    name: blueprints-api-security
   main:
     allow-bean-definition-overriding: true
 
+# Este servicio actua como su propio Authorization Server (emite tokens en /auth/login)
+# y como Resource Server (valida tokens entrantes). La validacion NO usa un jwk-set-uri
+# externo: el par de llaves RSA se genera en memoria (JwtKeyProvider) y los beans
+# JwtEncoder/JwtDecoder definidos en SecurityConfig usan esa misma llave.
 blueprints:
   security:
     issuer: "https://decsis-eci/blueprints"

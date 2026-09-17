@@ -1,4 +1,4 @@
-### Login (obtener token)
+### Login como "student" (scope: blueprints.read)
 POST http://localhost:8080/auth/login
 Content-Type: application/json
 
@@ -7,6 +7,56 @@ Content-Type: application/json
   "password": "student123"
 }
 
-### Listar blueprints (usar token)
+### Login como "assistant" (scope: blueprints.read blueprints.write)
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{
+  "username": "assistant",
+  "password": "assistant123"
+}
+
+### Login con credenciales inválidas (401)
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{
+  "username": "student",
+  "password": "incorrecta"
+}
+
+### Listar todos los blueprints (requiere blueprints.read)
 GET http://localhost:8080/api/blueprints
 Authorization: Bearer {{access_token}}
+
+### Listar blueprints de un autor (requiere blueprints.read)
+GET http://localhost:8080/api/blueprints/john
+Authorization: Bearer {{access_token}}
+
+### Consultar un blueprint puntual (requiere blueprints.read)
+GET http://localhost:8080/api/blueprints/john/house
+Authorization: Bearer {{access_token}}
+
+### Crear un nuevo blueprint (requiere blueprints.write; con token de "student" responde 403)
+POST http://localhost:8080/api/blueprints
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "author": "student",
+  "name": "Nuevo Plano",
+  "points": [ { "x": 0, "y": 0 }, { "x": 5, "y": 5 } ]
+}
+
+### Agregar un punto a un blueprint existente (requiere blueprints.write)
+PUT http://localhost:8080/api/blueprints/john/house/points
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "x": 99,
+  "y": 99
+}
+
+### Petición sin token (401)
+GET http://localhost:8080/api/blueprints

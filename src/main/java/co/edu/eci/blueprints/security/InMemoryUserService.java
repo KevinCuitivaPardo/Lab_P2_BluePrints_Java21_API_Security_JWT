@@ -6,19 +6,29 @@ import java.util.Map;
 
 @Service
 public class InMemoryUserService {
-    private final Map<String, String> users; // username -> hash
+
+    private record UserRecord(String passwordHash, String scopes) { }
+
+    private final Map<String, UserRecord> users;
     private final PasswordEncoder encoder;
 
     public InMemoryUserService(PasswordEncoder encoder) {
         this.encoder = encoder;
         this.users = Map.of(
-            "student", encoder.encode("student123"),
-            "assistant", encoder.encode("assistant123")
+            // "student" solo puede leer blueprints (SCOPE_blueprints.read)
+            "student", new UserRecord(encoder.encode("student123"), "blueprints.read"),
+            // "assistant" puede leer y crear/modificar blueprints
+            "assistant", new UserRecord(encoder.encode("assistant123"), "blueprints.read blueprints.write")
         );
     }
 
     public boolean isValid(String username, String rawPassword) {
-        String hash = users.get(username);
-        return hash != null && encoder.matches(rawPassword, hash);
+        UserRecord user = users.get(username);
+        return user != null && encoder.matches(rawPassword, user.passwordHash());
+    }
+
+    public String scopesOf(String username) {
+        UserRecord user = users.get(username);
+        return user != null ? user.scopes() : "";
     }
 }
